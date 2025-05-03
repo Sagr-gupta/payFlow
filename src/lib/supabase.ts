@@ -13,13 +13,16 @@ export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: true,
-    storage: window.localStorage
+    storage: window.localStorage,
+    flowType: 'pkce',
+    debug: true
   },
   global: {
     headers: {
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization'
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization, apikey, prefer',
+      'Access-Control-Allow-Credentials': 'true'
     }
   }
 });
@@ -27,7 +30,7 @@ export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
 // Test connection function
 export const testConnection = async () => {
   try {
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from('users')
       .select('count')
       .single();

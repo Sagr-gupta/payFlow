@@ -1,9 +1,11 @@
 import { create } from 'zustand';
 import { supabase } from '../lib/supabase';
-import { User as AppUser } from '../types';
+import type { Database } from '../types/supabase';
+
+type User = Database['public']['Tables']['users']['Row'];
 
 interface AuthState {
-  user: AppUser | null;
+  user: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
   error: string | null;
@@ -14,19 +16,19 @@ interface AuthState {
   resendConfirmationEmail: (email: string) => Promise<boolean>;
 }
 
-const fetchUserProfile = async (userId: string): Promise<AppUser | null> => {
+const fetchUserProfile = async (userId: string): Promise<User | null> => {
   const { data, error } = await supabase
     .from('users')
     .select('*')
-    .eq('id', userId)
+    .eq('id', userId as any)
     .single();
 
-  if (error) {
+  if (error || !data) {
     console.error('Error fetching user profile:', error);
     return null;
   }
 
-  return data as AppUser;
+  return data as unknown as User;
 };
 
 export const useAuthStore = create<AuthState>((set) => ({
@@ -47,10 +49,10 @@ export const useAuthStore = create<AuthState>((set) => ({
         email: email.trim(),
         password: password.trim(),
         options: {
-          emailRedirectTo: `${window.location.origin}/auth/callback`,
+          emailRedirectTo: `${import.meta.env.VITE_VERCEL_URL}/auth/callback`,
           data: {
             name,
-            company,
+            company
           }
         }
       });
@@ -61,17 +63,16 @@ export const useAuthStore = create<AuthState>((set) => ({
       }
       
       if (authData.user) {
+        const userData = {
+          email: email.trim(),
+          name,
+          company,
+          role: 'user' as const
+        } as const;
+
         const { error: profileError } = await supabase
           .from('users')
-          .insert([
-            {
-              id: authData.user.id,
-              email: email.trim(),
-              name,
-              company,
-              role: 'user',
-            },
-          ]);
+          .insert([userData as any]);
           
         if (profileError) {
           console.error('Profile creation error:', profileError);
@@ -144,13 +145,25 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ isLoading: true, error: null });
     
     try {
-      const { error } = await supabase.auth.signOut();
-      if (error) throw error;
-      set({ user: null, isAuthenticated: false });
+      // Clear local storage first
+      window.localStorage.clear();
+      
+      // Try to sign out if there's a session
+      await supabase.auth.signOut();
+      
+      // Reset state regardless of signOut result
+      set({ 
+        user: null, 
+        isAuthenticated: false,
+        isLoading: false,
+        error: null
+      });
     } catch (error) {
-      set({ error: error instanceof Error ? error.message : 'An error occurred' });
-    } finally {
-      set({ isLoading: false });
+      console.error('Logout failed:', error);
+      set({ 
+        error: error instanceof Error ? error.message : 'Failed to logout',
+        isLoading: false
+      });
     }
   },
   
